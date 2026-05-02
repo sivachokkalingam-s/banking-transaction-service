@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-service-service
+  namespace: default
+  labels:
+    app: transaction-service
+spec:
+  selector:
+    app: transaction-service
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 3003
+      targetPort: 3003
+      nodePort: 30003

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: transaction-service-config
+  namespace: default
+data:
+  PORT: "3003"
+  NODE_ENV: "production"
+  SERVICE_NAME: "transaction-service"
+  SERVICE_VERSION: "1.0.0"
+  DB_PATH: "/app/data/transactions.db"
+  ACCOUNT_SERVICE_URL: "http://account-service-service:3002"
+  NOTIFICATION_SERVICE_URL: "http://notification-service-service:4104"
+  DAILY_TRANSFER_LIMIT: "200000"
+  HIGH_VALUE_THRESHOLD: "50000"
+  REQUEST_TIMEOUT_MS: "5000"
+  MAX_RETRY_ATTEMPTS: "3"
+  LOG_LEVEL: "info"
+  MASK_SENSITIVE: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: transaction-service-secret
+  namespace: default
+type: Opaque
+stringData:
+  # Add secrets here (e.g., external DB credentials, API keys)
+  DUMMY_SECRET: "placeholder"
