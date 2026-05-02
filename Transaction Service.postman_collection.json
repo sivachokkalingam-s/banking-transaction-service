@@ -1,0 +1,458 @@
+{
+  "info": {
+    "name": "Transaction Service",
+    "description": "Complete Postman collection for Transaction Service API\n\nGroup 5 - Scalable Banking Platform\n\n## Quick Start\n1. Import this collection\n2. Set base_url variable to http://localhost:3003\n3. Run the full collection in order",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3003", "type": "string" },
+    { "key": "from_account", "value": "ACC-001", "type": "string" },
+    { "key": "to_account", "value": "ACC-002", "type": "string" },
+    { "key": "transaction_id", "value": "", "type": "string" },
+    { "key": "idempotency_key", "value": "test-transfer-key-001", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Observability",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Service name correct', () => pm.expect(body.service).to.eql('transaction-service'));",
+                  "pm.test('Has database stats', () => pm.expect(body.database).to.have.property('transactions'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "Readiness Probe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/ready"
+          }
+        },
+        {
+          "name": "Prometheus Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Contains transaction metrics', () => pm.expect(pm.response.text()).to.include('transactions_total'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/metrics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "List & Get",
+      "item": [
+        {
+          "name": "Get All Transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Returns array', () => pm.expect(body.transactions).to.be.an('array'));",
+                  "pm.test('Has total', () => pm.expect(body.total).to.be.a('number'));",
+                  "if(body.transactions.length > 0) { pm.collectionVariables.set('transaction_id', body.transactions[0].transaction_id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/v1/transactions?limit=10&offset=0",
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Transactions - Filter by Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/v1/transactions?status=SUCCESS&limit=5",
+              "query": [
+                { "key": "status", "value": "SUCCESS" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Transactions - Filter by Type",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/v1/transactions?type=DEPOSIT&limit=5",
+              "query": [
+                { "key": "type", "value": "DEPOSIT" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transaction by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Has transaction', () => pm.expect(body.transaction).to.have.property('transaction_id'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/v1/transactions/{{transaction_id}}"
+          }
+        },
+        {
+          "name": "Get Transaction by ID - Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/v1/transactions/NONEXISTENT-ID"
+          }
+        },
+        {
+          "name": "Account Statement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Has account_id', () => pm.expect(body.account_id).to.eql('ACC-001'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/v1/transactions/account/ACC-001/statement"
+          }
+        },
+        {
+          "name": "Account Statement - Date Range",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/v1/transactions/account/ACC-001/statement?from=2024-01-01&to=2025-12-31&type=DEPOSIT",
+              "query": [
+                { "key": "from", "value": "2024-01-01" },
+                { "key": "to", "value": "2025-12-31" },
+                { "key": "type", "value": "DEPOSIT" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deposit",
+      "item": [
+        {
+          "name": "Deposit - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Success true', () => pm.expect(body.success).to.be.true);",
+                  "pm.test('Transaction type DEPOSIT', () => pm.expect(body.transaction.transaction_type).to.eql('DEPOSIT'));",
+                  "pm.collectionVariables.set('transaction_id', body.transaction.transaction_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 5000,\n  \"channel\": \"ONLINE\",\n  \"description\": \"Salary credit\",\n  \"reference\": \"SAL-JAN-2025\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deposit - High Value (≥50000)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 75000,\n  \"channel\": \"BRANCH\",\n  \"description\": \"Business income\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deposit - Validation Error (missing amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"ACC-001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deposit - Validation Error (negative amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"ACC-001\",\n  \"amount\": -500\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Withdrawal",
+      "item": [
+        {
+          "name": "Withdrawal - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Type is WITHDRAWAL', () => pm.expect(body.transaction.transaction_type).to.eql('WITHDRAWAL'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/withdraw",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 2000,\n  \"channel\": \"ATM\",\n  \"description\": \"ATM withdrawal\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Withdrawal - Validation Error (zero amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/withdraw",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"ACC-001\",\n  \"amount\": 0\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfer",
+      "item": [
+        {
+          "name": "Transfer - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Has debit transaction', () => pm.expect(body.debit_transaction).to.exist);",
+                  "pm.test('Has credit transaction', () => pm.expect(body.credit_transaction).to.exist);",
+                  "pm.test('Replay false', () => pm.expect(body.replay).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Test transfer\",\n  \"channel\": \"ONLINE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Transfer - Idempotent Replay (same key)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 (replay)', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Replay true', () => pm.expect(body.replay).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Test transfer\",\n  \"channel\": \"ONLINE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Transfer - High Value",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 60000,\n  \"idempotency_key\": \"high-value-transfer-001\",\n  \"description\": \"High value transfer test\",\n  \"channel\": \"ONLINE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Transfer - Same Account Error",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_account_id\": \"ACC-001\",\n  \"to_account_id\": \"ACC-001\",\n  \"amount\": 500,\n  \"idempotency_key\": \"same-account-test\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Transfer - Missing idempotency_key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_account_id\": \"ACC-001\",\n  \"to_account_id\": \"ACC-002\",\n  \"amount\": 500\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Swagger",
+      "item": [
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api-docs"
+          }
+        },
+        {
+          "name": "OpenAPI Spec (JSON)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/openapi.yaml"
+          }
+        }
+      ]
+    }
+  ]
+}
