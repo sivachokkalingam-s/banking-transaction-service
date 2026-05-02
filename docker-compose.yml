@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  transaction-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: transaction-service
+    image: transaction-service:latest
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - NODE_ENV=production
+      - SERVICE_NAME=transaction-service
+      - SERVICE_VERSION=1.0.0
+      - DB_PATH=/app/data/transactions.db
+      - ACCOUNT_SERVICE_URL=http://account-service:3002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4104
+      - DAILY_TRANSFER_LIMIT=200000
+      - HIGH_VALUE_THRESHOLD=50000
+      - REQUEST_TIMEOUT_MS=5000
+      - MAX_RETRY_ATTEMPTS=3
+      - LOG_LEVEL=info
+      - MASK_SENSITIVE=true
+    volumes:
+      - transaction_data:/app/data
+    restart: unless-stopped
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.group5.service=transaction"
+      - "com.group5.project=scalable-banking"
+
+volumes:
+  transaction_data:
+    driver: local
+
+networks:
+  banking-network:
+    name: banking-network
+    driver: bridge
+    # Set external: true if the network is shared with other services
+    # external: true
