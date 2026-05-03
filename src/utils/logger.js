@@ -1,66 +1,54 @@
+'use strict';
+
 const winston = require('winston');
 
 const MASK_SENSITIVE = process.env.MASK_SENSITIVE !== 'false';
 
-// Fields to mask in logs
-const SENSITIVE_FIELDS = ['email', 'phone', 'password', 'token', 'account_number'];
-
-function maskValue(key, value) {
-  if (!MASK_SENSITIVE) return value;
-  if (typeof value !== 'string') return value;
-  if (SENSITIVE_FIELDS.includes(key.toLowerCase())) {
-    if (key.toLowerCase() === 'email') {
-      const [local, domain] = value.split('@');
-      return `${local.slice(0, 2)}***@${domain}`;
-    }
-    if (key.toLowerCase() === 'phone') {
-      return value.replace(/(\d{2})\d+(\d{2})/, '$1*****$2');
-    }
-    return '***';
-  }
-  return value;
-}
-
-function maskObject(obj) {
-  if (!obj || typeof obj !== 'object') return obj;
-  const masked = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (typeof val === 'object' && val !== null) {
-      masked[key] = maskObject(val);
-    } else {
-      masked[key] = maskValue(key, val);
-    }
+// Mask PII in log objects
+function maskSensitive(obj) {
+  if (!MASK_SENSITIVE || !obj || typeof obj !== 'object') return obj;
+  const masked = Array.isArray(obj) ? [...obj] : { ...obj };
+  for (const key of Object.keys(masked)) {
+    if (/email/i.test(key))  masked[key] = maskEmail(masked[key]);
+    else if (/phone|mobile/i.test(key)) masked[key] = maskPhone(masked[key]);
+    else if (/password|secret|token/i.test(key)) masked[key] = '***';
+    else if (masked[key] && typeof masked[key] === 'object') masked[key] = maskSensitive(masked[key]);
   }
   return masked;
+}
+
+function maskEmail(v) {
+  if (typeof v !== 'string') return v;
+  const [local, domain] = v.split('@');
+  if (!domain) return '***';
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function maskPhone(v) {
+  if (typeof v !== 'string') return v;
+  return v.replace(/\d(?=\d{4})/g, '*');
 }
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
-    winston.format.timestamp(),
+    winston.format.timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }),
     winston.format.errors({ stack: true }),
-    winston.format.json()
+    winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
+      const safeMsg = typeof message === 'object' ? maskSensitive(message) : message;
+      const safeMeta = maskSensitive(meta);
+      return JSON.stringify({
+        timestamp,
+        level,
+        service: process.env.SERVICE_NAME || 'transaction-service',
+        version: process.env.SERVICE_VERSION || '1.0.0',
+        message: safeMsg,
+        ...(stack ? { stack } : {}),
+        ...safeMeta,
+      });
+    })
   ),
-  defaultMeta: {
-    service: process.env.SERVICE_NAME || 'transaction-service',
-    version: process.env.SERVICE_VERSION || '1.0.0',
-  },
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize({ all: process.env.NODE_ENV !== 'production' }),
-        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length
-            ? ' ' + JSON.stringify(maskObject(meta))
-            : '';
-          return `${timestamp} [${level}] ${message}${metaStr}`;
-        })
-      ),
-    }),
-  ],
+  transports: [new winston.transports.Console()],
 });
-
-logger.maskObject = maskObject;
 
 module.exports = logger;

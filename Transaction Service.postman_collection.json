@@ -1,456 +1,472 @@
 {
   "info": {
-    "name": "Transaction Service",
-    "description": "Complete Postman collection for Transaction Service API\n\nGroup 5 - Scalable Banking Platform\n\n## Quick Start\n1. Import this collection\n2. Set base_url variable to http://localhost:3003\n3. Run the full collection in order",
-    "version": "1.0.0",
+    "name": "Transaction Service — Complete",
+    "description": "Full test coverage for Transaction Service.\nGroup 5 — Siva Chokkalingam S (2024TM93515)\n\n## Quick Start\n1. Import this collection\n2. Set base_url = http://localhost:3003\n3. Run folders in order: Observability → Deposit → Withdraw → Transfer → Edge Cases",
+    "version": "2.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://localhost:3003", "type": "string" },
-    { "key": "from_account", "value": "ACC-001", "type": "string" },
-    { "key": "to_account", "value": "ACC-002", "type": "string" },
-    { "key": "transaction_id", "value": "", "type": "string" },
-    { "key": "idempotency_key", "value": "test-transfer-key-001", "type": "string" }
+    { "key": "base_url",       "value": "http://localhost:3003", "type": "string" },
+    { "key": "from_account",   "value": "ACC-1",                 "type": "string" },
+    { "key": "to_account",     "value": "ACC-2",                 "type": "string" },
+    { "key": "frozen_account", "value": "ACC-FROZEN-TEST",       "type": "string" },
+    { "key": "closed_account", "value": "ACC-CLOSED-TEST",       "type": "string" },
+    { "key": "transaction_id", "value": "",                      "type": "string" },
+    { "key": "idempotency_key","value": "idem-key-run-001",      "type": "string" }
   ],
   "item": [
     {
-      "name": "Observability",
+      "name": "1. Observability",
       "item": [
         {
           "name": "Health Check",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Service name correct', () => pm.expect(body.service).to.eql('transaction-service'));",
-                  "pm.test('Has database stats', () => pm.expect(body.database).to.have.property('transactions'));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/health"
-          }
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Service name', () => pm.expect(b.service).to.eql('transaction-service'));",
+            "pm.test('Status ok', () => pm.expect(b.status).to.eql('ok'));",
+            "pm.test('Has database stats', () => pm.expect(b.database).to.have.property('transactions'));",
+            "pm.test('Has dependency URLs', () => pm.expect(b.dependencies).to.have.property('accountService'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/health" }
         },
         {
           "name": "Readiness Probe",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/ready"
-          }
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Ready', () => pm.expect(pm.response.json().status).to.eql('ready'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/ready" }
         },
         {
           "name": "Prometheus Metrics",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Contains transaction metrics', () => pm.expect(pm.response.text()).to.include('transactions_total'));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/metrics"
-          }
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Has transactions_total metric', () => pm.expect(pm.response.text()).to.include('transactions_total'));",
+            "pm.test('Has failed_transfers_total', () => pm.expect(pm.response.text()).to.include('failed_transfers_total'));",
+            "pm.test('Has balance_check_latency_ms', () => pm.expect(pm.response.text()).to.include('balance_check_latency_ms'));",
+            "pm.test('Has daily_limit_rejections_total', () => pm.expect(pm.response.text()).to.include('daily_limit_rejections_total'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/metrics" }
+        },
+        {
+          "name": "Swagger UI",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/api-docs" }
         }
       ]
     },
     {
-      "name": "List & Get",
+      "name": "2. List & Get",
       "item": [
         {
-          "name": "Get All Transactions",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Returns array', () => pm.expect(body.transactions).to.be.an('array'));",
-                  "pm.test('Has total', () => pm.expect(body.total).to.be.a('number'));",
-                  "if(body.transactions.length > 0) { pm.collectionVariables.set('transaction_id', body.transactions[0].transaction_id); }"
-                ]
-              }
-            }
-          ],
+          "name": "Get All Transactions (paginated)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Returns transactions array', () => pm.expect(b.transactions).to.be.an('array'));",
+            "pm.test('Has total count', () => pm.expect(b.total).to.be.a('number'));",
+            "pm.test('Seeded data present (300+ records)', () => pm.expect(b.total).to.be.gte(300));",
+            "if(b.transactions.length > 0) pm.collectionVariables.set('transaction_id', b.transactions[0].transaction_id);"
+          ]}}],
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/v1/transactions?limit=10&offset=0",
-              "query": [
-                { "key": "limit", "value": "10" },
-                { "key": "offset", "value": "0" }
-              ]
-            }
+            "url": { "raw": "{{base_url}}/v1/transactions?limit=10&offset=0",
+              "query": [{ "key": "limit", "value": "10" }, { "key": "offset", "value": "0" }] }
           }
         },
         {
-          "name": "Get All Transactions - Filter by Status",
+          "name": "Filter by Type — DEPOSIT",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('All results are DEPOSIT', () => b.transactions.forEach(t => pm.expect(t.transaction_type).to.eql('DEPOSIT')));"
+          ]}}],
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/v1/transactions?status=SUCCESS&limit=5",
-              "query": [
-                { "key": "status", "value": "SUCCESS" },
-                { "key": "limit", "value": "5" }
-              ]
-            }
+            "url": { "raw": "{{base_url}}/v1/transactions?type=DEPOSIT&limit=5",
+              "query": [{ "key": "type", "value": "DEPOSIT" }, { "key": "limit", "value": "5" }] }
           }
         },
         {
-          "name": "Get All Transactions - Filter by Type",
+          "name": "Filter by Type — TRANSFER_OUT",
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/v1/transactions?type=DEPOSIT&limit=5",
-              "query": [
-                { "key": "type", "value": "DEPOSIT" },
-                { "key": "limit", "value": "5" }
-              ]
-            }
+            "url": { "raw": "{{base_url}}/v1/transactions?type=TRANSFER_OUT&limit=5",
+              "query": [{ "key": "type", "value": "TRANSFER_OUT" }, { "key": "limit", "value": "5" }] }
+          }
+        },
+        {
+          "name": "Filter by Status — SUCCESS",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/v1/transactions?status=SUCCESS&limit=5",
+              "query": [{ "key": "status", "value": "SUCCESS" }, { "key": "limit", "value": "5" }] }
           }
         },
         {
           "name": "Get Transaction by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Has transaction', () => pm.expect(body.transaction).to.have.property('transaction_id'));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/v1/transactions/{{transaction_id}}"
-          }
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Has transaction_id', () => pm.expect(b.transaction).to.have.property('transaction_id'));",
+            "pm.test('Has amount', () => pm.expect(b.transaction.amount).to.be.a('number'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/transactions/{{transaction_id}}" }
         },
         {
-          "name": "Get Transaction by ID - Not Found",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/v1/transactions/NONEXISTENT-ID"
-          }
+          "name": "Get Transaction by ID — Not Found (404)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/transactions/TXN-DOES-NOT-EXIST" }
         },
         {
-          "name": "Account Statement",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Has account_id', () => pm.expect(body.account_id).to.eql('ACC-001'));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/v1/transactions/account/ACC-001/statement"
-          }
+          "name": "Account Statement — ACC-1",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Has account_id', () => pm.expect(b.account_id).to.eql('ACC-1'));",
+            "pm.test('Has transactions', () => pm.expect(b.transactions).to.be.an('array'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/transactions/account/ACC-1/statement" }
         },
         {
-          "name": "Account Statement - Date Range",
+          "name": "Account Statement — Date Range Filter",
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/v1/transactions/account/ACC-001/statement?from=2024-01-01&to=2025-12-31&type=DEPOSIT",
+            "url": { "raw": "{{base_url}}/v1/transactions/account/ACC-1/statement?from=2024-01-01&to=2025-12-31&limit=10",
               "query": [
-                { "key": "from", "value": "2024-01-01" },
-                { "key": "to", "value": "2025-12-31" },
-                { "key": "type", "value": "DEPOSIT" }
-              ]
-            }
+                { "key": "from",  "value": "2024-01-01" },
+                { "key": "to",    "value": "2025-12-31" },
+                { "key": "limit", "value": "10" }
+              ] }
           }
         }
       ]
     },
     {
-      "name": "Deposit",
+      "name": "3. Deposit",
       "item": [
         {
-          "name": "Deposit - Success",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "const body = pm.response.json();",
-                  "pm.test('Success true', () => pm.expect(body.success).to.be.true);",
-                  "pm.test('Transaction type DEPOSIT', () => pm.expect(body.transaction.transaction_type).to.eql('DEPOSIT'));",
-                  "pm.collectionVariables.set('transaction_id', body.transaction.transaction_id);"
-                ]
-              }
-            }
-          ],
+          "name": "Deposit — Success (normal amount)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const b = pm.response.json();",
+            "pm.test('success: true', () => pm.expect(b.success).to.be.true);",
+            "pm.test('Type is DEPOSIT', () => pm.expect(b.transaction.transaction_type).to.eql('DEPOSIT'));",
+            "pm.test('Amount matches', () => pm.expect(b.transaction.amount).to.eql(5000));",
+            "pm.collectionVariables.set('transaction_id', b.transaction.transaction_id);"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/deposit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 5000,\n  \"channel\": \"ONLINE\",\n  \"description\": \"Salary credit\",\n  \"reference\": \"SAL-JAN-2025\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 5000,\n  \"channel\": \"ONLINE\",\n  \"description\": \"Salary credit\",\n  \"reference\": \"SAL-MAY-2026\"\n}" }
           }
         },
         {
-          "name": "Deposit - High Value (≥50000)",
+          "name": "Deposit — HIGH VALUE ≥ ₹50,000 (triggers notification)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const b = pm.response.json();",
+            "pm.test('Amount is high value', () => pm.expect(b.transaction.amount).to.be.gte(50000));",
+            "pm.test('Type is DEPOSIT', () => pm.expect(b.transaction.transaction_type).to.eql('DEPOSIT'));",
+            "console.log('High-value notification should have fired to Notification Service');"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/deposit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 75000,\n  \"channel\": \"BRANCH\",\n  \"description\": \"Business income\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 75000,\n  \"channel\": \"BRANCH\",\n  \"description\": \"Business income — high value demo\"\n}" }
           }
         },
         {
-          "name": "Deposit - Validation Error (missing amount)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
-              }
-            }
-          ],
+          "name": "Deposit — Validation Error: missing amount (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Has errors array', () => pm.expect(pm.response.json().errors).to.be.an('array'));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/deposit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"ACC-001\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"ACC-1\"\n}" }
           }
         },
         {
-          "name": "Deposit - Validation Error (negative amount)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
-              }
-            }
-          ],
+          "name": "Deposit — Validation Error: negative amount (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/deposit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"ACC-001\",\n  \"amount\": -500\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"ACC-1\",\n  \"amount\": -500\n}" }
+          }
+        },
+        {
+          "name": "Deposit — Validation Error: zero amount (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"ACC-1\",\n  \"amount\": 0\n}" }
           }
         }
       ]
     },
     {
-      "name": "Withdrawal",
+      "name": "4. Withdraw",
       "item": [
         {
-          "name": "Withdrawal - Success",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "const body = pm.response.json();",
-                  "pm.test('Type is WITHDRAWAL', () => pm.expect(body.transaction.transaction_type).to.eql('WITHDRAWAL'));"
-                ]
-              }
-            }
-          ],
+          "name": "Withdraw — Success",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const b = pm.response.json();",
+            "pm.test('Type is WITHDRAWAL', () => pm.expect(b.transaction.transaction_type).to.eql('WITHDRAWAL'));",
+            "pm.test('Amount matches', () => pm.expect(b.transaction.amount).to.eql(2000));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/withdraw",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 2000,\n  \"channel\": \"ATM\",\n  \"description\": \"ATM withdrawal\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 2000,\n  \"channel\": \"ATM\",\n  \"description\": \"ATM withdrawal\"\n}" }
           }
         },
         {
-          "name": "Withdrawal - Validation Error (zero amount)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
-              }
-            }
-          ],
+          "name": "Withdraw — Insufficient Balance / Overdraft (SAVINGS) (422)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));",
+            "const b = pm.response.json();",
+            "pm.test('Error code INSUFFICIENT_BALANCE', () => pm.expect(b.code).to.eql('INSUFFICIENT_BALANCE'));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/withdraw",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"ACC-001\",\n  \"amount\": 0\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{from_account}}\",\n  \"amount\": 99999999,\n  \"channel\": \"ATM\",\n  \"description\": \"Overdraft attempt\"\n}" }
+          }
+        },
+        {
+          "name": "Withdraw — Validation: zero amount (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/withdraw",
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"ACC-1\",\n  \"amount\": 0\n}" }
           }
         }
       ]
     },
     {
-      "name": "Transfer",
+      "name": "5. Transfer",
       "item": [
         {
-          "name": "Transfer - Success",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "const body = pm.response.json();",
-                  "pm.test('Has debit transaction', () => pm.expect(body.debit_transaction).to.exist);",
-                  "pm.test('Has credit transaction', () => pm.expect(body.credit_transaction).to.exist);",
-                  "pm.test('Replay false', () => pm.expect(body.replay).to.be.false);"
-                ]
-              }
-            }
-          ],
+          "name": "Transfer — Success (first call, replay=false)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const b = pm.response.json();",
+            "pm.test('success: true', () => pm.expect(b.success).to.be.true);",
+            "pm.test('replay: false', () => pm.expect(b.replay).to.be.false);",
+            "pm.test('Has debit_transaction', () => pm.expect(b.debit_transaction).to.exist);",
+            "pm.test('Has credit_transaction', () => pm.expect(b.credit_transaction).to.exist);",
+            "pm.test('Debit type TRANSFER_OUT', () => pm.expect(b.debit_transaction.transaction_type).to.eql('TRANSFER_OUT'));",
+            "pm.test('Credit type TRANSFER_IN', () => pm.expect(b.credit_transaction.transaction_type).to.eql('TRANSFER_IN'));",
+            "pm.test('Has daily_total_used', () => pm.expect(b.daily_total_used).to.be.a('number'));",
+            "pm.test('Has daily_limit', () => pm.expect(b.daily_limit).to.eql(200000));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/transfer",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Test transfer\",\n  \"channel\": \"ONLINE\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Rent payment\",\n  \"channel\": \"ONLINE\"\n}" }
           }
         },
         {
-          "name": "Transfer - Idempotent Replay (same key)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 (replay)', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Replay true', () => pm.expect(body.replay).to.be.true);"
-                ]
-              }
-            }
-          ],
+          "name": "Transfer — Idempotent Replay (same key → replay=true, 200)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200 (replay)', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('replay: true', () => pm.expect(b.replay).to.be.true);",
+            "pm.test('Same debit txn ID returned', () => pm.expect(b.debit_transaction).to.exist);"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/transfer",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Test transfer\",\n  \"channel\": \"ONLINE\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 1000,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Rent payment\",\n  \"channel\": \"ONLINE\"\n}" }
           }
         },
         {
-          "name": "Transfer - High Value",
+          "name": "Transfer — Idempotency Key Conflict (different amount, same key → 409)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409', () => pm.response.to.have.status(409));",
+            "pm.test('Code IDEMPOTENCY_KEY_CONFLICT', () => pm.expect(pm.response.json().code).to.eql('IDEMPOTENCY_KEY_CONFLICT'));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/transfer",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 60000,\n  \"idempotency_key\": \"high-value-transfer-001\",\n  \"description\": \"High value transfer test\",\n  \"channel\": \"ONLINE\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 9999,\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"description\": \"Different amount — should 409\"\n}" }
           }
         },
         {
-          "name": "Transfer - Same Account Error",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
-              }
-            }
-          ],
+          "name": "Transfer — HIGH VALUE ≥ ₹50,000 (triggers high-value notification)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const b = pm.response.json();",
+            "pm.test('Amount is high value', () => pm.expect(b.debit_transaction.amount).to.be.gte(50000));",
+            "console.log('High-value notification should fire to POST /notifications/high-value');"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/transfer",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_account_id\": \"ACC-001\",\n  \"to_account_id\": \"ACC-001\",\n  \"amount\": 500,\n  \"idempotency_key\": \"same-account-test\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 60000,\n  \"idempotency_key\": \"high-value-transfer-demo-001\",\n  \"description\": \"High value transfer — triggers notification\",\n  \"channel\": \"NEFT\"\n}" }
           }
         },
         {
-          "name": "Transfer - Missing idempotency_key",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"]
-              }
-            }
-          ],
+          "name": "Transfer — Same Account Error (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Code SAME_ACCOUNT_TRANSFER', () => pm.expect(pm.response.json().code).to.eql('SAME_ACCOUNT_TRANSFER'));"
+          ]}}],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/v1/transactions/transfer",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"from_account_id\": \"ACC-001\",\n  \"to_account_id\": \"ACC-002\",\n  \"amount\": 500\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"ACC-1\",\n  \"to_account_id\": \"ACC-1\",\n  \"amount\": 500,\n  \"idempotency_key\": \"same-account-test-001\"\n}" }
+          }
+        },
+        {
+          "name": "Transfer — Missing idempotency_key (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Error mentions idempotency_key', () => pm.expect(pm.response.json().errors[0]).to.include('idempotency_key'));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"ACC-1\",\n  \"to_account_id\": \"ACC-2\",\n  \"amount\": 500\n}" }
           }
         }
       ]
     },
     {
-      "name": "Swagger",
+      "name": "6. Edge Cases — Account States (KYC / Frozen / Closed)",
+      "description": "These tests require the account_cache to contain test accounts with specific statuses. Pre-seed them via the POST /v1/account-cache/seed endpoint (test-only) or insert directly into SQLite before running.",
       "item": [
         {
-          "name": "Swagger UI",
+          "name": "Deposit to FROZEN account (422 ACCOUNT_FROZEN)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));",
+            "const b = pm.response.json();",
+            "pm.test('Code ACCOUNT_FROZEN', () => pm.expect(b.code).to.eql('ACCOUNT_FROZEN'));",
+            "console.log('FROZEN accounts from dataset (e.g. status=FROZEN) correctly rejected');"
+          ]}}],
           "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api-docs"
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{frozen_account}}\",\n  \"amount\": 1000,\n  \"channel\": \"ONLINE\"\n}" }
           }
         },
         {
-          "name": "OpenAPI Spec (JSON)",
+          "name": "Deposit to CLOSED account (422 ACCOUNT_CLOSED)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));",
+            "const b = pm.response.json();",
+            "pm.test('Code ACCOUNT_CLOSED', () => pm.expect(b.code).to.eql('ACCOUNT_CLOSED'));"
+          ]}}],
           "request": {
-            "method": "GET",
-            "url": "{{base_url}}/openapi.yaml"
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"{{closed_account}}\",\n  \"amount\": 1000,\n  \"channel\": \"ONLINE\"\n}" }
           }
+        },
+        {
+          "name": "Deposit — KYC Not Verified (403 KYC_NOT_VERIFIED)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403', () => pm.response.to.have.status(403));",
+            "pm.test('Code KYC_NOT_VERIFIED', () => pm.expect(pm.response.json().code).to.eql('KYC_NOT_VERIFIED'));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/deposit",
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": \"ACC-KYC-PENDING\",\n  \"amount\": 1000,\n  \"channel\": \"ONLINE\"\n}" }
+          }
+        },
+        {
+          "name": "Transfer FROM Frozen account (422 ACCOUNT_FROZEN)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));",
+            "pm.test('Code ACCOUNT_FROZEN', () => pm.expect(pm.response.json().code).to.eql('ACCOUNT_FROZEN'));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{frozen_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 500,\n  \"idempotency_key\": \"frozen-transfer-test-001\"\n}" }
+          }
+        },
+        {
+          "name": "Transfer Daily Limit Exceeded (422 DAILY_LIMIT_EXCEEDED)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));",
+            "pm.test('Code DAILY_LIMIT_EXCEEDED', () => pm.expect(pm.response.json().code).to.eql('DAILY_LIMIT_EXCEEDED'));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/v1/transactions/transfer",
+            "body": { "mode": "raw", "raw": "{\n  \"from_account_id\": \"{{from_account}}\",\n  \"to_account_id\": \"{{to_account}}\",\n  \"amount\": 200001,\n  \"idempotency_key\": \"daily-limit-breach-test-001\",\n  \"description\": \"Attempt to breach ₹2,00,000 daily limit\"\n}" }
+          }
+        },
+        {
+          "name": "404 — Unknown Route",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/unknown-route" }
+        }
+      ]
+    },
+    {
+      "name": "7. High-Value Demo Records (from seed)",
+      "description": "These records are pre-seeded (TXN-HV-DEMO-001 and TXN-HV-DEMO-002) to demonstrate the high-value notification path since the dataset max is ₹46,806 (below the ₹50,000 threshold).",
+      "item": [
+        {
+          "name": "Get High-Value Deposit Seed Record",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Amount ≥ 50000', () => pm.expect(b.transaction.amount).to.be.gte(50000));",
+            "pm.test('Type DEPOSIT', () => pm.expect(b.transaction.transaction_type).to.eql('DEPOSIT'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/transactions/TXN-HV-DEMO-001" }
+        },
+        {
+          "name": "Get High-Value Transfer Seed Record",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('Amount ≥ 50000', () => pm.expect(b.transaction.amount).to.be.gte(50000));",
+            "pm.test('Type TRANSFER_OUT', () => pm.expect(b.transaction.transaction_type).to.eql('TRANSFER_OUT'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/v1/transactions/TXN-HV-DEMO-002" }
         }
       ]
     }

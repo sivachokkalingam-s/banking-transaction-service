@@ -3,9 +3,13 @@ kind: PersistentVolumeClaim
 metadata:
   name: transaction-service-pvc
   namespace: default
+  labels:
+    app: transaction-service
+    group: group5-banking
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce        # SQLite is single-writer; one pod only
   resources:
     requests:
       storage: 1Gi
+  # storageClassName: standard   # Minikube default; comment out for cloud
