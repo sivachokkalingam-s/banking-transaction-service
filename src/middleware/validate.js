@@ -7,6 +7,10 @@ function validateDeposit(req, res, next) {
   const { account_id, amount } = req.body;
   const errors = [];
 
+  const VALID_CHANNELS = ['ONLINE','ATM','BRANCH','UPI','NEFT','RTGS'];
+  if (req.body.channel && !VALID_CHANNELS.includes(req.body.channel))
+    errors.push(`channel must be one of: ${VALID_CHANNELS.join(', ')}`);
+
   if (!account_id || typeof account_id !== 'string' || !account_id.trim())
     errors.push('account_id is required');
   if (amount === undefined || amount === null)
@@ -29,6 +33,10 @@ function validateWithdraw(req, res, next) {
   const { account_id, amount } = req.body;
   const errors = [];
 
+  const VALID_CHANNELS = ['ONLINE','ATM','BRANCH','UPI','NEFT','RTGS'];
+  if (req.body.channel && !VALID_CHANNELS.includes(req.body.channel))
+    errors.push(`channel must be one of: ${VALID_CHANNELS.join(', ')}`);
+
   if (!account_id || typeof account_id !== 'string' || !account_id.trim())
     errors.push('account_id is required');
   if (amount === undefined || amount === null)
@@ -48,6 +56,10 @@ function validateWithdraw(req, res, next) {
 function validateTransfer(req, res, next) {
   const { from_account_id, to_account_id, amount, idempotency_key } = req.body;
   const errors = [];
+
+  const VALID_CHANNELS = ['ONLINE','ATM','BRANCH','UPI','NEFT','RTGS'];
+  if (req.body.channel && !VALID_CHANNELS.includes(req.body.channel))
+    errors.push(`channel must be one of: ${VALID_CHANNELS.join(', ')}`);
 
   if (!from_account_id || typeof from_account_id !== 'string' || !from_account_id.trim())
     errors.push('from_account_id is required');
