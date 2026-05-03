@@ -1,14 +1,15 @@
+'use strict';
+
 const client = require('prom-client');
 
-// Enable default metrics (CPU, memory, event loop, etc.)
 const register = new client.Registry();
-client.collectDefaultMetrics({ register, prefix: 'txn_service_' });
+client.collectDefaultMetrics({ register, prefix: 'txn_svc_' });
 
-// ── RED Metrics ──────────────────────────────────────────────────────────────
+// ── RED metrics ──────────────────────────────────────────────────────────────
 
 const httpRequestsTotal = new client.Counter({
   name: 'http_requests_total',
-  help: 'Total number of HTTP requests',
+  help: 'Total HTTP requests by method, route, and status',
   labelNames: ['method', 'route', 'status'],
   registers: [register],
 });
@@ -21,59 +22,45 @@ const httpRequestDurationMs = new client.Histogram({
   registers: [register],
 });
 
-const httpErrorsTotal = new client.Counter({
-  name: 'http_errors_total',
-  help: 'Total number of HTTP errors (4xx + 5xx)',
-  labelNames: ['method', 'route', 'status'],
-  registers: [register],
-});
-
-// ── Business Metrics ─────────────────────────────────────────────────────────
+// ── Business metrics ─────────────────────────────────────────────────────────
 
 const transactionsTotal = new client.Counter({
   name: 'transactions_total',
-  help: 'Total number of transactions processed',
-  labelNames: ['type', 'status'],
+  help: 'Total transactions processed by type and status',
+  labelNames: ['transaction_type', 'status'],
   registers: [register],
 });
 
 const failedTransfersTotal = new client.Counter({
   name: 'failed_transfers_total',
-  help: 'Total number of failed transfer operations',
+  help: 'Total failed transfer attempts by reason',
   labelNames: ['reason'],
   registers: [register],
 });
 
 const balanceCheckLatencyMs = new client.Histogram({
   name: 'balance_check_latency_ms',
-  help: 'Latency of balance check calls to Account Service (ms)',
-  buckets: [10, 25, 50, 100, 250, 500, 1000, 2000],
+  help: 'Latency of balance check calls to Account Service in ms',
+  buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500],
   registers: [register],
 });
 
-const transferAmountHistogram = new client.Histogram({
-  name: 'transfer_amount_inr',
-  help: 'Distribution of transfer amounts in INR',
-  buckets: [500, 1000, 5000, 10000, 50000, 100000, 200000],
+const dailyLimitRejections = new client.Counter({
+  name: 'daily_limit_rejections_total',
+  help: 'Transfers rejected due to daily limit breach',
   registers: [register],
 });
 
-const idempotentReplayTotal = new client.Counter({
-  name: 'idempotent_replay_total',
-  help: 'Total idempotent request replays served from cache',
+const notificationsSentTotal = new client.Counter({
+  name: 'notifications_sent_total',
+  help: 'Notifications dispatched by type',
+  labelNames: ['type', 'success'],
   registers: [register],
 });
 
-const dailyLimitBreachTotal = new client.Counter({
-  name: 'daily_limit_breach_total',
-  help: 'Total number of daily limit breach rejections',
-  registers: [register],
-});
-
-const notificationLatencyMs = new client.Histogram({
-  name: 'notification_call_latency_ms',
-  help: 'Latency of calls to Notification Service (ms)',
-  buckets: [10, 50, 100, 250, 500, 1000, 3000],
+const idempotencyReplays = new client.Counter({
+  name: 'idempotency_replays_total',
+  help: 'Idempotent /transfer requests that returned cached response',
   registers: [register],
 });
 
@@ -81,12 +68,10 @@ module.exports = {
   register,
   httpRequestsTotal,
   httpRequestDurationMs,
-  httpErrorsTotal,
   transactionsTotal,
   failedTransfersTotal,
   balanceCheckLatencyMs,
-  transferAmountHistogram,
-  idempotentReplayTotal,
-  dailyLimitBreachTotal,
-  notificationLatencyMs,
+  dailyLimitRejections,
+  notificationsSentTotal,
+  idempotencyReplays,
 };

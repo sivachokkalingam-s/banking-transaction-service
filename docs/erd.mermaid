@@ -1,0 +1,55 @@
+---
+title: Transaction Service — Database Schema (ERD)
+---
+erDiagram
+    TRANSACTIONS {
+        TEXT    transaction_id      PK  "TXN-<uuid>"
+        TEXT    account_id          FK  "→ account_cache"
+        TEXT    transaction_type        "DEPOSIT|WITHDRAWAL|TRANSFER_IN|TRANSFER_OUT|PAYMENT"
+        REAL    amount                  "CHECK amount > 0"
+        TEXT    currency                "default INR"
+        TEXT    counterparty_id         "linked account (transfers)"
+        TEXT    reference               "idempotency_key or external ref"
+        TEXT    description
+        TEXT    channel                 "ONLINE|ATM|BRANCH|UPI|NEFT|RTGS"
+        TEXT    status                  "PENDING|SUCCESS|FAILED|ROLLED_BACK"
+        REAL    balance_after           "balance post-transaction"
+        TEXT    correlation_id
+        TEXT    created_at              "default datetime('now')"
+        TEXT    updated_at
+    }
+
+    ACCOUNT_CACHE {
+        TEXT    account_id          PK  "replicated from Account Service"
+        TEXT    customer_id             "replicated from Customer Service"
+        TEXT    customer_name
+        TEXT    account_number
+        TEXT    account_type            "SAVINGS|CURRENT|SALARY|NRE"
+        REAL    balance                 "last known balance"
+        TEXT    currency
+        TEXT    status                  "ACTIVE|FROZEN|CLOSED"
+        TEXT    kyc_status              "VERIFIED|PENDING|REJECTED"
+        TEXT    cached_at
+        TEXT    updated_at
+    }
+
+    IDEMPOTENCY_KEYS {
+        TEXT    idempotency_key     PK  "client-supplied unique key"
+        TEXT    request_hash            "hash of from+to+amount"
+        TEXT    response_body           "full JSON response (cached)"
+        INT     http_status
+        TEXT    debit_txn_id        FK  "→ transactions"
+        TEXT    credit_txn_id       FK  "→ transactions"
+        TEXT    created_at
+        TEXT    expires_at              "default +24h"
+    }
+
+    DAILY_TRANSFER_TOTALS {
+        TEXT    account_id          PK  "composite PK"
+        TEXT    transfer_date       PK  "YYYY-MM-DD"
+        REAL    total_amount            "running sum of TRANSFER_OUT"
+    }
+
+    TRANSACTIONS        }o--||    ACCOUNT_CACHE           : "account_id"
+    IDEMPOTENCY_KEYS    ||--o{    TRANSACTIONS            : "debit / credit txn_id"
+    DAILY_TRANSFER_TOTALS }o--||  ACCOUNT_CACHE           : "account_id"

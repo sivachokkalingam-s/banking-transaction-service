@@ -1,344 +1,257 @@
-const router = require('express').Router();
-const transactionService = require('../services/transactionService');
-const { validateDeposit, validateWithdrawal, validateTransfer } = require('../middleware/validation');
-const logger = require('../utils/logger');
+'use strict';
 
-// ── GET /v1/transactions ──────────────────────────────────────────────────────
+const express = require('express');
+const router  = express.Router();
+const txnSvc  = require('../services/transactionService');
+const { validateDeposit, validateWithdraw, validateTransfer } = require('../middleware/validate');
 
+// ── List transactions ─────────────────────────────────────────────────────────
 /**
  * @openapi
  * /v1/transactions:
  *   get:
- *     summary: List all transactions
- *     description: Returns paginated list of transactions with optional filters
+ *     summary: List all transactions (paginated)
  *     tags: [Transactions]
  *     parameters:
  *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [PENDING, SUCCESS, FAILED, REVERSED]
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [DEPOSIT, WITHDRAWAL, TRANSFER_DEBIT, TRANSFER_CREDIT]
- *       - in: query
- *         name: account_id
- *         schema:
- *           type: string
- *       - in: query
  *         name: limit
- *         schema:
- *           type: integer
- *           default: 50
- *           maximum: 200
+ *         schema: { type: integer, default: 20 }
  *       - in: query
  *         name: offset
- *         schema:
- *           type: integer
- *           default: 0
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [DEPOSIT,WITHDRAWAL,TRANSFER_IN,TRANSFER_OUT,PAYMENT] }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [SUCCESS,FAILED,PENDING,ROLLED_BACK] }
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200:
- *         description: List of transactions
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 total:
- *                   type: integer
- *                 limit:
- *                   type: integer
- *                 offset:
- *                   type: integer
- *                 transactions:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Transaction'
+ *         description: Paginated transaction list
  */
 router.get('/', (req, res, next) => {
   try {
-    const result = transactionService.getAllTransactions(req.query);
-    return res.json({ success: true, ...result });
-  } catch (err) {
-    next(err);
-  }
+    const limit  = Math.min(parseInt(req.query.limit  || '20', 10), 100);
+    const offset = parseInt(req.query.offset || '0', 10);
+    const result = txnSvc.listTransactions({
+      type: req.query.type, status: req.query.status,
+      from: req.query.from, to: req.query.to,
+      limit, offset,
+    });
+    res.json(result);
+  } catch (err) { next(err); }
 });
 
-// ── GET /v1/transactions/:id ──────────────────────────────────────────────────
-
-/**
- * @openapi
- * /v1/transactions/{transactionId}:
- *   get:
- *     summary: Get transaction by ID
- *     tags: [Transactions]
- *     parameters:
- *       - in: path
- *         name: transactionId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Transaction details
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 transaction:
- *                   $ref: '#/components/schemas/Transaction'
- *       404:
- *         $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/:transactionId', (req, res, next) => {
-  try {
-    const txn = transactionService.getTransaction(req.params.transactionId);
-    return res.json({ success: true, transaction: txn });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── GET /v1/transactions/account/:accountId/statement ────────────────────────
-
+// ── Account statement ─────────────────────────────────────────────────────────
 /**
  * @openapi
  * /v1/transactions/account/{accountId}/statement:
  *   get:
- *     summary: Get account statement
- *     description: Returns transaction history for a specific account (account mini-statement)
+ *     summary: Account statement
  *     tags: [Transactions]
  *     parameters:
  *       - in: path
  *         name: accountId
  *         required: true
- *         schema:
- *           type: string
- *         example: ACC001
+ *         schema: { type: string }
  *       - in: query
  *         name: from
- *         description: Start date (YYYY-MM-DD)
- *         schema:
- *           type: string
+ *         schema: { type: string, format: date }
  *       - in: query
  *         name: to
- *         description: End date (YYYY-MM-DD)
- *         schema:
- *           type: string
+ *         schema: { type: string, format: date }
  *       - in: query
  *         name: type
- *         schema:
- *           type: string
- *           enum: [DEPOSIT, WITHDRAWAL, TRANSFER_DEBIT, TRANSFER_CREDIT]
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
+ *         schema: { type: string }
  *       - in: query
  *         name: limit
- *         schema:
- *           type: integer
- *           default: 50
+ *         schema: { type: integer, default: 50 }
  *       - in: query
  *         name: offset
- *         schema:
- *           type: integer
- *           default: 0
+ *         schema: { type: integer, default: 0 }
  *     responses:
  *       200:
  *         description: Account statement
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 account_id:
- *                   type: string
- *                 total:
- *                   type: integer
- *                 transactions:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Transaction'
  */
 router.get('/account/:accountId/statement', (req, res, next) => {
   try {
-    const result = transactionService.getStatement(req.params.accountId, req.query);
-    return res.json({ success: true, account_id: req.params.accountId, ...result });
-  } catch (err) {
-    next(err);
-  }
+    const limit  = Math.min(parseInt(req.query.limit  || '50', 10), 200);
+    const offset = parseInt(req.query.offset || '0', 10);
+    const result = txnSvc.getStatement({
+      accountId: req.params.accountId,
+      type:      req.query.type,
+      from:      req.query.from,
+      to:        req.query.to,
+      limit, offset,
+    });
+    res.json({ account_id: req.params.accountId, ...result });
+  } catch (err) { next(err); }
 });
 
-// ── POST /v1/transactions/deposit ────────────────────────────────────────────
+// ── Get single transaction ───────────────────────────────────────────────────
+/**
+ * @openapi
+ * /v1/transactions/{id}:
+ *   get:
+ *     summary: Get transaction by ID
+ *     tags: [Transactions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Transaction record
+ *       404:
+ *         description: Not found
+ */
+router.get('/:id', (req, res, next) => {
+  try {
+    const txn = txnSvc.getTransaction(req.params.id);
+    if (!txn) return res.status(404).json({ success: false, error: 'Transaction not found' });
+    res.json({ transaction: txn });
+  } catch (err) { next(err); }
+});
 
+// ── Deposit ───────────────────────────────────────────────────────────────────
 /**
  * @openapi
  * /v1/transactions/deposit:
  *   post:
- *     summary: Process a deposit
- *     description: Credit funds to an account. Calls Account Service to update balance.
+ *     summary: Deposit funds
  *     tags: [Transactions]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/DepositRequest'
- *           example:
- *             account_id: "ACC001"
- *             amount: 5000
- *             channel: "ONLINE"
- *             description: "Salary credit"
- *             reference: "SAL-JAN-2024"
+ *             type: object
+ *             required: [account_id, amount]
+ *             properties:
+ *               account_id: { type: string }
+ *               amount:     { type: number, minimum: 0.01 }
+ *               channel:    { type: string, enum: [ONLINE,ATM,BRANCH,UPI,NEFT,RTGS] }
+ *               description: { type: string }
+ *               reference:  { type: string }
  *     responses:
  *       201:
  *         description: Deposit successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 transaction:
- *                   $ref: '#/components/schemas/Transaction'
  *       400:
  *         description: Validation error
+ *       403:
+ *         description: KYC not verified
  *       422:
- *         description: Business rule violation (frozen account, etc.)
- *       502:
- *         description: Account service unavailable
+ *         description: Account frozen/closed
  */
 router.post('/deposit', validateDeposit, async (req, res, next) => {
   try {
-    const txn = await transactionService.processDeposit({
-      ...req.body,
-      amount: Number(req.body.amount),
-      correlation_id: req.correlationId,
+    const txn = await txnSvc.deposit({
+      accountId:   req.body.account_id,
+      amount:      req.body.amount,
+      channel:     req.body.channel || 'ONLINE',
+      description: req.body.description,
+      reference:   req.body.reference,
+      correlationId: req.correlationId,
     });
-    return res.status(201).json({ success: true, transaction: txn });
-  } catch (err) {
-    next(err);
-  }
+    res.status(201).json({ success: true, transaction: txn });
+  } catch (err) { next(err); }
 });
 
-// ── POST /v1/transactions/withdraw ───────────────────────────────────────────
-
+// ── Withdraw ──────────────────────────────────────────────────────────────────
 /**
  * @openapi
  * /v1/transactions/withdraw:
  *   post:
- *     summary: Process a withdrawal
- *     description: Debit funds from an account. Prevents overdraft on SAVINGS accounts.
+ *     summary: Withdraw funds
  *     tags: [Transactions]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/WithdrawalRequest'
- *           example:
- *             account_id: "ACC001"
- *             amount: 2000
- *             channel: "ATM"
+ *             type: object
+ *             required: [account_id, amount]
+ *             properties:
+ *               account_id: { type: string }
+ *               amount:     { type: number, minimum: 0.01 }
+ *               channel:    { type: string }
+ *               description: { type: string }
  *     responses:
  *       201:
  *         description: Withdrawal successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 transaction:
- *                   $ref: '#/components/schemas/Transaction'
- *       400:
- *         description: Validation error
  *       422:
- *         description: Insufficient funds or frozen account
+ *         description: Insufficient balance / account frozen
  */
-router.post('/withdraw', validateWithdrawal, async (req, res, next) => {
+router.post('/withdraw', validateWithdraw, async (req, res, next) => {
   try {
-    const txn = await transactionService.processWithdrawal({
-      ...req.body,
-      amount: Number(req.body.amount),
-      correlation_id: req.correlationId,
+    const txn = await txnSvc.withdraw({
+      accountId:    req.body.account_id,
+      amount:       req.body.amount,
+      channel:      req.body.channel || 'ATM',
+      description:  req.body.description,
+      correlationId: req.correlationId,
     });
-    return res.status(201).json({ success: true, transaction: txn });
-  } catch (err) {
-    next(err);
-  }
+    res.status(201).json({ success: true, transaction: txn });
+  } catch (err) { next(err); }
 });
 
-// ── POST /v1/transactions/transfer ───────────────────────────────────────────
-
+// ── Transfer ──────────────────────────────────────────────────────────────────
 /**
  * @openapi
  * /v1/transactions/transfer:
  *   post:
  *     summary: Transfer funds between accounts (idempotent)
- *     description: |
- *       Atomically moves funds from one account to another.
- *       - Creates both TRANSFER_DEBIT and TRANSFER_CREDIT records
- *       - Enforces ₹2,00,000 daily limit per source account
- *       - Prevents overdraft on SAVINGS accounts
- *       - Blocks frozen accounts
- *       - Idempotency: repeat calls with same `idempotency_key` return cached result
- *       - Full rollback if credit fails after debit succeeds
- *       - Fires high-value notification if amount ≥ ₹50,000
  *     tags: [Transactions]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/TransferRequest'
- *           example:
- *             from_account_id: "ACC001"
- *             to_account_id: "ACC002"
- *             amount: 10000
- *             idempotency_key: "transfer-unique-key-2024-001"
- *             description: "Rent payment"
- *             channel: "ONLINE"
+ *             type: object
+ *             required: [from_account_id, to_account_id, amount, idempotency_key]
+ *             properties:
+ *               from_account_id: { type: string }
+ *               to_account_id:   { type: string }
+ *               amount:          { type: number, minimum: 0.01 }
+ *               idempotency_key: { type: string, maxLength: 255 }
+ *               description:     { type: string }
+ *               channel:         { type: string }
  *     responses:
  *       201:
- *         description: Transfer successful
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/TransferResponse'
+ *         description: Transfer completed (new)
  *       200:
- *         description: Idempotent replay – previous successful response returned
+ *         description: Idempotent replay — previous result returned
  *       400:
- *         description: Validation error (missing fields, same account, etc.)
+ *         description: Validation error / same-account transfer
+ *       403:
+ *         description: KYC not verified
+ *       409:
+ *         description: Idempotency key conflict
  *       422:
- *         description: Business rule violation (daily limit, insufficient funds, frozen)
- *       502:
- *         description: Account service error
+ *         description: Insufficient balance / daily limit / account frozen
  */
 router.post('/transfer', validateTransfer, async (req, res, next) => {
   try {
-    const result = await transactionService.processTransfer({
-      ...req.body,
-      amount: Number(req.body.amount),
-      correlation_id: req.correlationId,
+    const result = await txnSvc.transfer({
+      fromAccountId:  req.body.from_account_id,
+      toAccountId:    req.body.to_account_id,
+      amount:         req.body.amount,
+      idempotencyKey: req.body.idempotency_key,
+      description:    req.body.description,
+      channel:        req.body.channel || 'ONLINE',
+      correlationId:  req.correlationId,
     });
-    const statusCode = result.replay ? 200 : 201;
-    return res.status(statusCode).json({ success: true, ...result });
-  } catch (err) {
-    next(err);
-  }
+
+    const status = result.replay ? 200 : 201;
+    res.status(status).json(result);
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
